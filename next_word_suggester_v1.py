@@ -9,49 +9,50 @@ Linear algebra used:
 """
 import re
 import math
+import glob
+import sys
 
 # ---------------------------------------------------------------- corpus
-corpus_file = open("corpus.txt", "r")
+corpus_files = sorted(glob.glob("corpus.txt") + glob.glob("corpus_*.txt"))
 
-if corpus_file:
-    CORPUS = corpus_file.read()
-    print("Corpus file read.")
+word_counts = {}
+word_bigrams = {}
+
+def read_corpus(corpus):
+    prev = None
+    for line in corpus:
+        for w in re.findall(r"[a-z]+", line.lower()):
+            word_counts[w] = word_counts.get(w, 0) + 1
+            if prev is not None:
+                row = word_bigrams.setdefault(prev, {})
+                row[w] = row.get(w, 0) + 1
+            prev = w
+
+if corpus_files:
+    for path in corpus_files:
+        with open(path, "r") as corpus_file:
+            read_corpus(corpus_file)
+        print(f"Corpus file read: {path}")
 else:
-    print("Using default corpus text.")
-    CORPUS = """
-    i like to drink coffee in the morning. i like to drink tea in the evening.
-    i like to read a book in the evening. she likes to drink coffee with milk.
-    the cat sat on the mat. the dog sat on the floor. the cat likes to drink milk.
-    i went to the store to buy some milk. i went to the park to read a book.
-    she went to the store to buy some coffee. we like to go to the park.
-    they like to read the news in the morning. the morning is cold today.
-    i receive the news every morning. she will receive the book today.
-    i think the weather is nice today. the weather is cold in the morning.
-    we will go to the store today. they will go to the park in the evening.
-    """
-
-
+    sys.exit("You need a corpus file ('corpus_[...].txt') first before using the program.")
 
 # Get entire vocabulary found in the corpus
-words = re.findall(r"[a-z]+", CORPUS.lower())
-vocab = sorted(set(words))
+vocab = sorted(word_counts)
 idx = {w: i for i, w in enumerate(vocab)}
 V = len(vocab)
 
 # ------------------------------------------- bigram matrix B -> P (sparse)
-B = {}                                   # B[i][j] = count of (word i -> word j)
-for a, b in zip(words, words[1:]):
-    B.setdefault(idx[a], {}).setdefault(idx[b], 0)
-    B[idx[a]][idx[b]] += 1
+B = {                                    # B[i][j] = count of (word i -> word j)
+    idx[a]: {idx[b]: c for b, c in row.items()}
+    for a, row in word_bigrams.items()
+}
 
-P = {}                                   # row-normalized: each row sums to 1
+P = {}                                   # Normalize rows so that each row sums up to 1 (100%)
 for i, row in B.items():
     total = sum(row.values())
     P[i] = {j: c / total for j, c in row.items()}
 
-freq = [0] * V                           # unigram counts, used as a tiny tiebreaker
-for w in words:
-    freq[idx[w]] += 1
+freq = [word_counts[w] for w in vocab]   # In the event that there is a tie in probability, use the frequency as a tie-breaker.
 
 
 # ------------------------------------------------- linear algebra helpers

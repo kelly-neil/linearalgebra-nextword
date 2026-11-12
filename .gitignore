@@ -1,1 +1,4 @@
 __pycache__
+.temp
+corpus_brown.txt
+corpus_commonwords.txt
