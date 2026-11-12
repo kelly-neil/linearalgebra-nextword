@@ -4,7 +4,7 @@ Put this file in the same folder as next_word_suggester.py, then run it.
 """
 import re
 import tkinter as tk
-from next_word_suggester_v2 import suggest
+from next_word_suggester_v1 import suggest
 
 
 class App:
