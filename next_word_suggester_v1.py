@@ -98,46 +98,45 @@ def cosine(u, v):
 
 BIGRAM_VECS = {w: char_bigram_vector(w) for w in vocab}
 
-
-def autocorrect(typed, k=1):
+# ------------------------------------------------- autocorrect (returns multiple options)
+def autocorrect(typed, k=3):
     tv = char_bigram_vector(typed)
     ranked = sorted(vocab, key=lambda w: cosine(tv, BIGRAM_VECS[w]), reverse=True)
     return ranked[:k]
 
-
 # --------------------------------------------------------- suggestion logic
 def suggest(text, n=3):
-    parts = text.lower().split(" ")
-    typed = parts[-1]                              # "" if text ends with a space
-    context = [w for w in parts[:-1] if w]
+    parts = text.split(" ")  # Keep original casing check for sentence starts
+    typed = parts[-1].lower()
+    context = [w.lower() for w in parts[:-1] if w]
+    
+    # Check if we are at the start of a sentence (after period/empty)
+    is_start_of_sentence = len(context) == 0 or (len(parts) > 1 and parts[-2].endswith('.'))
 
     # scores = D (c^T P)
     scores = vec_times_matrix(context_vector(context), P)
     total_freq = sum(freq)
-    scores = [s + 0.001 * f / total_freq for s, f in zip(scores, freq)]  # tiebreak
+    
+    # Fallback/Tiebreak: Blend with global frequency so cold-starts still suggest common words
+    scores = [s + 0.05 * (f / total_freq) for s, f in zip(scores, freq)]  
 
-    mask = [1 if w.startswith(typed) else 0 for w in vocab]              # diag of D
+    mask = [1 if w.startswith(typed) else 0 for w in vocab]
     if typed and sum(mask) > 0:
         scores = diag_times_vector(mask, scores)
 
     ranked = sorted(range(V), key=lambda j: scores[j], reverse=True)
     result = [vocab[j] for j in ranked if scores[j] > 0][:n]
 
-    # autocorrect: if the typed word isn't a real word, put the best fix first
+    # Autocorrect integration for out-of-vocabulary typos
     if typed and typed not in idx:
-        fix = autocorrect(typed)[0]
-        if fix in result:
-            result.remove(fix)
-        result = ([fix] + result)[:n]
+        fixes = autocorrect(typed, k=n)
+        for fix in fixes:
+            if fix not in result:
+                result.insert(0, fix)
+        result = result[:n]
+
+    # Apply smart capitalization if starting a sentence
+    if is_start_of_sentence:
+        result = [w.capitalize() for w in result]
+
     return result
-
-
-# ------------------------------------------------------------------ demo
-if __name__ == "__main__":
-    print(f"Vocabulary: {V} words. Type text; Enter on empty line to quit.")
-    print("Tip: end with a space to see next-word suggestions.\n")
-    while True:
-        text = input("> ")
-        if not text:
-            break
-        print("   suggestions:", suggest(text))
