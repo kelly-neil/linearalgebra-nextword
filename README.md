@@ -1,6 +1,6 @@
 ## Instructions
 
-Install numpy using `python3 -m pip install numpy`. (if the v2 file is being used)
+Install numpy using `python3 -m pip install numpy`or `python -m pip install numpy`. (if the v2 file is being used)
 
 Then run any of the following scripts:
 - `next_word_suggester_v2.py` (not final), which uses embeddings for smarter suggestions.
