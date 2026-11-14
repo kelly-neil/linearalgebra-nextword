@@ -4,7 +4,7 @@ Put this file in the same folder as next_word_suggester.py, then run it.
 """
 import re
 import tkinter as tk
-from next_word_suggester_v1 import suggest
+from next_word_suggester_v2 import suggest
 
 
 class App:
@@ -36,13 +36,16 @@ class App:
             self.refresh()
         self.text.edit_modified(False)   # reset so the next change fires again
 
-    def before_cursor(self):
-        """Text from the start up to the cursor, with newlines treated as spaces."""
-        return self.text.get("1.0", "insert").replace("\n", " ")
+    def full_text_at_cursor(self):
+        """Text from start through the end of the word the cursor is inside."""
+        before = self.text.get("1.0", "insert")
+        after = self.text.get("insert", "end")
+        word_tail = re.split(r"[ \n]", after)[0]
+        return (before + word_tail).replace("\n", " ")
 
     def refresh(self):
         try:
-            results = suggest(self.before_cursor())
+            results = suggest(self.full_text_at_cursor())
         except Exception as e:
             print(f"Suggestion error: {e}")
             results = []  # Fallback to empty list so the window doesn't crash
@@ -52,10 +55,12 @@ class App:
                      state="normal" if word else "disabled")
 
     def pick(self, word):
-        """Replace the partial word before the cursor with the chosen suggestion."""
-        partial = re.split(r"[ \n]", self.text.get("1.0", "insert"))[-1]
-        if partial:
-            self.text.delete(f"insert-{len(partial)}c", "insert")
+        """Replace the whole word around the cursor with the chosen suggestion."""
+        before = re.split(r"[ \n]", self.text.get("1.0", "insert"))[-1]
+        after = re.split(r"[ \n]", self.text.get("insert", "end"))[0]
+        start = f"insert-{len(before)}c"
+        end = f"insert+{len(after)}c"
+        self.text.delete(start, end)
         self.text.insert("insert", word + " ")
         self.text.focus()
 
