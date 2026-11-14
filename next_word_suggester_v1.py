@@ -1,20 +1,25 @@
 """
-Next-Word Suggestion with Autocorrect & Stationary Distribution (Pure Python)
+Next-Word Suggestion with Spelling Correction
 
 Linear algebra used:
   - Bigram count matrix B -> row-normalized stochastic transition matrix P
   - Vector-matrix product  c^T P   (c = decayed context vector)
-  - Power iteration for dominant eigenvector (stationary distribution, eigenvalue lambda = 1.0)
+  - Corpus word frequencies as a global prior
   - Diagonal matrix D = diag(m) for prefix filtering
   - Cosine similarity of character-bigram vectors for autocorrect
 """
 import re
 import math
-import glob
 import sys
+from pathlib import Path
 
 # ---------------------------------------------------------------- corpus
-corpus_files = sorted(glob.glob("corpus.txt") + glob.glob("corpus_*.txt"))
+project_dir = Path(__file__).resolve().parent
+corpus_files = sorted(
+    str(path)
+    for pattern in ("corpus.txt", "corpus_*.txt")
+    for path in project_dir.glob(pattern)
+)
 
 word_counts = {}
 word_bigrams = {}
@@ -31,7 +36,7 @@ def read_corpus(corpus):
 
 if corpus_files:
     for path in corpus_files:
-        with open(path, "r") as corpus_file:
+        with open(path, "r", encoding="utf-8") as corpus_file:
             read_corpus(corpus_file)
         print(f"Corpus file read: {path}")
 else:
@@ -41,6 +46,11 @@ else:
 vocab = sorted(word_counts)
 idx = {w: i for i, w in enumerate(vocab)}
 V = len(vocab)
+total_word_count = sum(word_counts.values())
+if total_word_count == 0:
+    sys.exit("Corpus files contain no words.")
+
+frequency_probs = [word_counts[w] / total_word_count for w in vocab]
 
 # ==============================================================================
 # PURPOSE: Build raw bigram frequency matrix B and row-normalize it into stochastic 
@@ -63,55 +73,7 @@ for i, row in B.items():
     total = sum(row.values())
     P[i] = {j: c / total for j, c in row.items()}
 
-# ==============================================================================
-# PURPOSE: Compute the dominant eigenvector (stationary distribution) of transition 
-#          matrix P using Power Iteration in pure Python.
-# MATHEMATICAL OPERATION: v_(k+1) = v_k P, where eigenvalue lambda = 1.0
-# EXPECTED RESULT: A probability vector representing long-term corpus word stability.
-# INTERPRETATION: Acts as a global probabilistic fallback when immediate local history 
-#                  is missing or weak during cold-start predictions.
-# ==============================================================================
-
-def compute_stationary_distribution(P, V, iterations=30):
-    v = {i: 1.0 / V for i in range(V)}
-    for _ in range(iterations):
-        v_next = {j: 0.0 for j in range(V)}
-        for i, vi in v.items():
-            if i in P:
-                for j, pij in P[i].items():
-                    v_next[j] += vi * pij
-        total = sum(v_next.values())
-        if total > 0:
-            v = {j: val / total for j, val in v_next.items()}
-        else:
-            break
-    return [v.get(i, 0.0) for i in range(V)]
-
-stationary_vec = compute_stationary_distribution(P, V)
-
 # ------------------------------------------------- linear algebra helpers
-def compute_stationary_distribution(P, V, iterations=30):
-    """
-    Computes the dominant eigenvector (stationary distribution) of transition matrix P
-    using Power Iteration in pure Python (eigenvalue lambda = 1.0).
-    """
-    v = {i: 1.0 / V for i in range(V)}
-    for _ in range(iterations):
-        v_next = {j: 0.0 for j in range(V)}
-        for i, vi in v.items():
-            if i in P:
-                for j, pij in P[i].items():
-                    v_next[j] += vi * pij
-        total = sum(v_next.values())
-        if total > 0:
-            v = {j: val / total for j, val in v_next.items()}
-        else:
-            break
-    return [v.get(i, 0.0) for i in range(V)]
-
-# Compute global stationary vector via eigenvector power iteration
-stationary_vec = compute_stationary_distribution(P, V)
-
 # ==============================================================================
 # PURPOSE: Construct decayed sparse context vector c and evaluate baseline next-word 
 #          transition scores across the vocabulary.
@@ -185,20 +147,10 @@ def suggest(text, n=3):
     # Check if we are at the start of a sentence (after period/empty)
     is_start_of_sentence = len(context) == 0 or (len(parts) > 1 and parts[-2].endswith('.'))
 
-# ==============================================================================
-# PURPOSE: Blend global stationary distribution eigenvector with local transition scores, 
-#          then apply diagonal binary mask matrix D for real-time prefix matching.
-# MATHEMATICAL OPERATION: s = D ( c^T P + 0.05v ) where D = diag(m)
-# EXPECTED RESULT: Filtered score array containing only valid candidates matching user keystrokes.
-# INTERPRETATION: Balances local syntax with global frequency while instantly eliminating 
-#                  vocabulary words that do not match the typed character prefix.
-# ==============================================================================
-
-    # scores = c^T P
+    # Blend local transition scores with a small corpus-frequency prior before
+    # applying the prefix mask.
     scores = vec_times_matrix(context_vector(context), P)
-    
-    # Fallback/Tiebreak: Blend with the stationary distribution eigenvector (lambda = 1.0)
-    scores = [s + 0.05 * sv for s, sv in zip(scores, stationary_vec)]  
+    scores = [s + 0.05 * fp for s, fp in zip(scores, frequency_probs)]
 
     mask = [1 if w.startswith(typed) else 0 for w in vocab]
     if typed and sum(mask) > 0:

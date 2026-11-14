@@ -1,0 +1,45 @@
+linear algebra uses vectors and matrices to solve complex computer science problems
+vectors can represent words and contexts in a high dimensional space
+matrices can describe transitions between words using probability distributions
+the next word depends on the words before it in any given text sequence
+probability helps rank possible next words efficiently and accurately
+text is divided into words and counted to build bigram transition tables
+machine learning models process natural language using linear transformations
+cosine similarity helps correct spelling mistakes and find similar terms
+diagonal matrices act as filters for prefix matching in mobile keyboards
+smartphones suggest words as you type to speed up user input speed
+natural language processing relies heavily on linear algebra concepts
+eigenvalues and eigenvectors can rank pages on the web
+python code implements these mathematical models with high performance
+autocomplete systems predict the user intent based on previous context
+linear equations and systems model real world computing applications
+artificial intelligence systems use probabilistic models for text prediction
+typing on a mobile screen is often error prone and slow
+smart keyboard software anticipates what the user wants to write next
+word transition matrices store conditional probabilities for language pairs
+semantic analysis groups words into related categories using vectors
+Say , Jim , how about going for a few beers after dinner ?
+You know that is tempting but is really not good for our fitness .
+What do you mean ? It will help us to relax .
+Do you really think so ? I don't . It will just make us fat and act silly . Remember last time ?
+I guess you are right.But what shall we do ? I don't feel like sitting at home .
+I suggest a walk over to the gym where we can play singsong and meet some of our friends .
+That's a good idea . I hear Mary and Sally often go there to play pingpong.Perhaps we can make a foursome with them .
+Sounds great to me ! If they are willing , we could ask them to go dancing with us.That is excellent exercise and fun , too .
+Good.Let ' s go now .
+All right .
+Can you do push-ups ?
+Of course I can . It's a piece of cake ! Believe it or not , I can do 30 push-ups a minute .
+Really ? I think that's impossible !
+You mean 30 push-ups ?
+Yeah !
+It's easy . If you do exercise everyday , you can make it , too .
+Can you study with the radio on ?
+No , I listen to background music .
+What is the difference ?
+The radio has too many comerials .
+That's true , but then you have to buy a record player .
+Are you all right ?
+I will be all right soon . I was terrified when I watched them fall from the wire .
+Don't worry.He is an acrobat 。
+I see .
