@@ -44,7 +44,12 @@ class App:
         return (before + word_tail).replace("\n", " ")
 
     def refresh(self):
-        results = suggest(self.full_text_at_cursor())
+        try:
+            results = suggest(self.full_text_at_cursor())
+        except Exception as e:
+            print(f"Suggestion error: {e}")
+            results = []  # Fallback to empty list so the window doesn't crash
+            
         for b, word in zip(self.buttons, results + [""] * 3):
             b.config(text=word, command=lambda w=word: self.pick(w),
                      state="normal" if word else "disabled")

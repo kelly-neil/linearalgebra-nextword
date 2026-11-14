@@ -1,9 +1,10 @@
 """
-Next-Word Suggestion with Autocorrect  (plain Python, no libraries except re/math)
+Next-Word Suggestion with Autocorrect & Stationary Distribution (Pure Python)
 
 Linear algebra used:
-  - Bigram count matrix B -> row-normalized transition matrix P
+  - Bigram count matrix B -> row-normalized stochastic transition matrix P
   - Vector-matrix product  c^T P   (c = decayed context vector)
+  - Power iteration for dominant eigenvector (stationary distribution, eigenvalue lambda = 1.0)
   - Diagonal matrix D = diag(m) for prefix filtering
   - Cosine similarity of character-bigram vectors for autocorrect
 """
@@ -52,10 +53,31 @@ for i, row in B.items():
     total = sum(row.values())
     P[i] = {j: c / total for j, c in row.items()}
 
-freq = [word_counts[w] for w in vocab]   # In the event that there is a tie in probability, use the frequency as a tie-breaker.
-
 
 # ------------------------------------------------- linear algebra helpers
+def compute_stationary_distribution(P, V, iterations=30):
+    """
+    Computes the dominant eigenvector (stationary distribution) of transition matrix P
+    using Power Iteration in pure Python (eigenvalue lambda = 1.0).
+    """
+    v = {i: 1.0 / V for i in range(V)}
+    for _ in range(iterations):
+        v_next = {j: 0.0 for j in range(V)}
+        for i, vi in v.items():
+            if i in P:
+                for j, pij in P[i].items():
+                    v_next[j] += vi * pij
+        total = sum(v_next.values())
+        if total > 0:
+            v = {j: val / total for j, val in v_next.items()}
+        else:
+            break
+    return [v.get(i, 0.0) for i in range(V)]
+
+# Compute global stationary vector via eigenvector power iteration
+stationary_vec = compute_stationary_distribution(P, V)
+
+
 def context_vector(context_words, alpha=0.2):
     """c = e(w_t) + alpha*e(w_t-1) + alpha^2*e(w_t-2) + ...  (sparse dict)."""
     c, weight = {}, 1.0
@@ -98,46 +120,44 @@ def cosine(u, v):
 
 BIGRAM_VECS = {w: char_bigram_vector(w) for w in vocab}
 
-
-def autocorrect(typed, k=1):
+# ------------------------------------------------- autocorrect logic
+def autocorrect(typed, k=3):
     tv = char_bigram_vector(typed)
     ranked = sorted(vocab, key=lambda w: cosine(tv, BIGRAM_VECS[w]), reverse=True)
     return ranked[:k]
 
-
 # --------------------------------------------------------- suggestion logic
 def suggest(text, n=3):
-    parts = text.lower().split(" ")
-    typed = parts[-1]                              # "" if text ends with a space
-    context = [w for w in parts[:-1] if w]
+    parts = text.split(" ")  # Keep original casing check for sentence starts
+    typed = parts[-1].lower()
+    context = [w.lower() for w in parts[:-1] if w]
+    
+    # Check if we are at the start of a sentence (after period/empty)
+    is_start_of_sentence = len(context) == 0 or (len(parts) > 1 and parts[-2].endswith('.'))
 
-    # scores = D (c^T P)
+    # scores = c^T P
     scores = vec_times_matrix(context_vector(context), P)
-    total_freq = sum(freq)
-    scores = [s + 0.001 * f / total_freq for s, f in zip(scores, freq)]  # tiebreak
+    
+    # Fallback/Tiebreak: Blend with the stationary distribution eigenvector (lambda = 1.0)
+    scores = [s + 0.05 * sv for s, sv in zip(scores, stationary_vec)]  
 
-    mask = [1 if w.startswith(typed) else 0 for w in vocab]              # diag of D
+    mask = [1 if w.startswith(typed) else 0 for w in vocab]
     if typed and sum(mask) > 0:
         scores = diag_times_vector(mask, scores)
 
     ranked = sorted(range(V), key=lambda j: scores[j], reverse=True)
     result = [vocab[j] for j in ranked if scores[j] > 0][:n]
 
-    # autocorrect: if the typed word isn't a real word, put the best fix first
+    # Autocorrect integration for out-of-vocabulary typos
     if typed and typed not in idx:
-        fix = autocorrect(typed)[0]
-        if fix in result:
-            result.remove(fix)
-        result = ([fix] + result)[:n]
+        fixes = autocorrect(typed, k=n)
+        for fix in fixes:
+            if fix not in result:
+                result.insert(0, fix)
+        result = result[:n]
+
+    # Apply smart capitalization if starting a sentence
+    if is_start_of_sentence:
+        result = [w.capitalize() for w in result]
+
     return result
-
-
-# ------------------------------------------------------------------ demo
-if __name__ == "__main__":
-    print(f"Vocabulary: {V} words. Type text; Enter on empty line to quit.")
-    print("Tip: end with a space to see next-word suggestions.\n")
-    while True:
-        text = input("> ")
-        if not text:
-            break
-        print("   suggestions:", suggest(text))
