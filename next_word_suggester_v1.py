@@ -42,6 +42,16 @@ vocab = sorted(word_counts)
 idx = {w: i for i, w in enumerate(vocab)}
 V = len(vocab)
 
+# ==============================================================================
+# PURPOSE: Build raw bigram frequency matrix B and row-normalize it into stochastic 
+#          transition matrix P such that every row sums to 1.0.
+# MATHEMATICAL OPERATION: P_ij = B_ij / sum_k(B_ik)
+# EXPECTED RESULT: A sparse nested dictionary where rows represent conditional 
+#                  probabilities of word transitions.
+# INTERPRETATION: Converts raw corpus co-occurrence counts into a valid row-stochastic 
+#                  Markov transition matrix.
+# ==============================================================================
+
 # ------------------------------------------- bigram matrix B -> P (sparse)
 B = {                                    # B[i][j] = count of (word i -> word j)
     idx[a]: {idx[b]: c for b, c in row.items()}
@@ -53,6 +63,31 @@ for i, row in B.items():
     total = sum(row.values())
     P[i] = {j: c / total for j, c in row.items()}
 
+# ==============================================================================
+# PURPOSE: Compute the dominant eigenvector (stationary distribution) of transition 
+#          matrix P using Power Iteration in pure Python.
+# MATHEMATICAL OPERATION: v_(k+1) = v_k P, where eigenvalue lambda = 1.0
+# EXPECTED RESULT: A probability vector representing long-term corpus word stability.
+# INTERPRETATION: Acts as a global probabilistic fallback when immediate local history 
+#                  is missing or weak during cold-start predictions.
+# ==============================================================================
+
+def compute_stationary_distribution(P, V, iterations=30):
+    v = {i: 1.0 / V for i in range(V)}
+    for _ in range(iterations):
+        v_next = {j: 0.0 for j in range(V)}
+        for i, vi in v.items():
+            if i in P:
+                for j, pij in P[i].items():
+                    v_next[j] += vi * pij
+        total = sum(v_next.values())
+        if total > 0:
+            v = {j: val / total for j, val in v_next.items()}
+        else:
+            break
+    return [v.get(i, 0.0) for i in range(V)]
+
+stationary_vec = compute_stationary_distribution(P, V)
 
 # ------------------------------------------------- linear algebra helpers
 def compute_stationary_distribution(P, V, iterations=30):
@@ -77,6 +112,14 @@ def compute_stationary_distribution(P, V, iterations=30):
 # Compute global stationary vector via eigenvector power iteration
 stationary_vec = compute_stationary_distribution(P, V)
 
+# ==============================================================================
+# PURPOSE: Construct decayed sparse context vector c and evaluate baseline next-word 
+#          transition scores across the vocabulary.
+# MATHEMATICAL OPERATION: s = c^T P, where c = e(w_t) + alpha*e(w_t-1) + ...
+# EXPECTED RESULT: A score vector evaluating likelihood across all vocabulary indices.
+# INTERPRETATION: Captures immediate historical word influence via exponential decay 
+#                  and projects it through the stochastic transition graph.
+# ==============================================================================
 
 def context_vector(context_words, alpha=0.2):
     """c = e(w_t) + alpha*e(w_t-1) + alpha^2*e(w_t-2) + ...  (sparse dict)."""
@@ -96,11 +139,18 @@ def vec_times_matrix(c, P):
             out[j] += ci * pij
     return out
 
-
 def diag_times_vector(m, x):
     """D x, where D = diag(m). Same as elementwise multiply."""
     return [mi * xi for mi, xi in zip(m, x)]
 
+# ==============================================================================
+# PURPOSE: Extract character bigram vectors with boundary markers and rank out-of-vocabulary 
+#          typos using vector cosine similarity.
+# MATHEMATICAL OPERATION: Cosine(u, v) = (u · v) / (||u|| ||v||)
+# EXPECTED RESULT: Ranked list of closest dictionary spelling suggestions.
+# INTERPRETATION: Measures directional angle between character feature spaces to recover 
+#                  misspelled queries and map them back to valid vocabulary entries.
+# ==============================================================================
 
 def char_bigram_vector(word):
     """Sparse vector of character-bigram counts, with ^ and $ boundary marks."""
@@ -134,6 +184,15 @@ def suggest(text, n=3):
     
     # Check if we are at the start of a sentence (after period/empty)
     is_start_of_sentence = len(context) == 0 or (len(parts) > 1 and parts[-2].endswith('.'))
+
+# ==============================================================================
+# PURPOSE: Blend global stationary distribution eigenvector with local transition scores, 
+#          then apply diagonal binary mask matrix D for real-time prefix matching.
+# MATHEMATICAL OPERATION: s = D ( c^T P + 0.05v ) where D = diag(m)
+# EXPECTED RESULT: Filtered score array containing only valid candidates matching user keystrokes.
+# INTERPRETATION: Balances local syntax with global frequency while instantly eliminating 
+#                  vocabulary words that do not match the typed character prefix.
+# ==============================================================================
 
     # scores = c^T P
     scores = vec_times_matrix(context_vector(context), P)
