@@ -2,7 +2,6 @@ __pycache__
 .temp
 corpus_brown.txt
 corpus_commonwords.txt
-corpus_dailydialogs.txt
 .txt
 
 
