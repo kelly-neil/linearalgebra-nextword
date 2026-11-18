@@ -6,6 +6,8 @@ Run either script from the project directory:
 
 Run either script with `python <filename>.py`.
 
+You may also open `testing_results.ipynb` to run the test suite.
+
 You will also need one or more UTF-8 text corpus files in the project directory, named `corpus_<name>.txt`.
 
 ## Credits
